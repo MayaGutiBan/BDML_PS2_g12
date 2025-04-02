@@ -62,7 +62,8 @@ pre_process_personas <- function(data) {
       nmujeres = sum(mujer, na.rm = TRUE),
       nmenores = sum(menor, na.rm = TRUE),
       maxEducLevel = max(EducLevel, na.rm = TRUE),
-      nocupados = sum(ocupado, na.rm = TRUE)
+      nocupados = sum(ocupado, na.rm = TRUE), 
+      noafiladiossal = sum(regSalud,na.rm = TRUE)
     )
   
   # Get household head info
