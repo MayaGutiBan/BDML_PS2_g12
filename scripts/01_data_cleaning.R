@@ -91,12 +91,16 @@ test_personas <-  pre_process_personas(test_personas)
 
 pre_process_hogar<-  function(data_hogares, data_personas, is_train) {
   data <- data_hogares %>%
-    mutate(arrienda = ifelse(P5090 == 3, 1, 0)) #Arriendo
+    mutate(arrienda = ifelse(P5090 == 3, 1, 0),#Arrienda
+           numdecuartos = P5000, ## Numero de cuartos en la casa 
+           dueño = ifelse(P5090==1 |P5090==2 ,1,0), ## es dueño o no 
+           invasiones = ifelse(P5090==5 ,1,0)
+          ) 
     # Conditionally include Pobre only for train data
     if (is_train) {
-      data <- data %>% select(id, Dominio, arrienda, Pobre)
+      data <- data %>% select(id, Dominio, arrienda, Pobre,numdecuartos,dueño,invasiones)
     } else {
-      data <- data %>% select(id, Dominio, arrienda)
+      data <- data %>% select(id, Dominio, arrienda,numdecuartos,dueño,invasiones)
     }
   
   data <- data %>% 
