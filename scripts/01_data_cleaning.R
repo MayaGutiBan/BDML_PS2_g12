@@ -47,9 +47,13 @@ pre_process_personas <- function(data) {
     menor = ifelse(P6040 <= 6, 1, 0), # Menores
     EducLevel = ifelse(P6210 == 9, 0, P6210), # Replace 9 with 0
     ocupado = ifelse(is.na(Oc), 0, 1),
-    regSalud = ifelse(P6090 == 9 | is.na(P6090), 0, P6090) # Replace 9 and NA with 0
+    regSalud = ifelse(P6090 == 9 | is.na(P6090), 0, P6090), # Replace 9 and NA with 0
+    Cotizante = ifelse(P6920 == 2 | P6920 == 3 | is.na(P6920), 0, P6920),
+    Pensionado = ifelse(P6920 == 1 | P6920 == 2 | is.na(P6920), 0, 1),
+    SegundoTrabajo = ifelse(P7040 == 1, 1, 0),
+    AuxAlime = ifelse(P6590 == 1, 1, 0)
   ) %>%
-    select(id, Orden,mujer,H_Head,menor,EducLevel,ocupado,regSalud)
+    select(id, Orden, mujer, H_Head, menor, EducLevel, ocupado, regSalud, Cotizante, Pensionado, SegundoTrabajo, AuxAlime)
   
   # Household-level aggregations
   data_nivelHogar <- data %>% 
