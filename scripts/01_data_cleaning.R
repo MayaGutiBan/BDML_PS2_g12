@@ -1,5 +1,5 @@
 ##########################################################
-# Example Script
+# Data processing script
 # Authors: Grupo 12
 # Script description: 
 ##########################################################
@@ -10,11 +10,12 @@ cat("\014")
 local({r <- getOption("repos"); r["CRAN"] <- "http://cran.r-project.org"; options(repos=r)}) #set repo
 
 #set working director
-setwd("~/Documents/GitHub/BDML_PS2_g12")
+setwd("~/Documents/Documents - Maya’s MacBook Air/GitHub/BDML_PS2_g12")
 
 # Load Packages -----------------------------------------------------------
 if (!require("pacman")) install.packages("pacman")
-p_load(tidyverse, # tidy-data
+p_load(dplyr,
+       tidyverse, # tidy-data
        glmnet, # To implement regularization algorithms. 
        caret, # creating predictive models
        Metrics
@@ -23,10 +24,11 @@ p_load(tidyverse, # tidy-data
 set.seed(1011)  # Fijar semilla para reproducibilidad de resultados.
 
 # Load data ---------------------------------------------------------------
-train_hogares<-read.csv("~/Documents/GitHub/BDML_PS2_g12/uniandes-bdml-202510-ps-2/train_hogares.csv")
-train_personas<-read.csv("~/Documents/GitHub/BDML_PS2_g12/uniandes-bdml-202510-ps-2/train_personas.csv")
-test_hogares<-read.csv("~/Documents/GitHub/BDML_PS2_g12/uniandes-bdml-202510-ps-2/test_hogares.csv")
-test_personas<-read.csv("~/Documents/GitHub/BDML_PS2_g12/uniandes-bdml-202510-ps-2/test_personas.csv")
+train_hogares<-read.csv("~/Documents/Documents - Maya’s MacBook Air/GitHub/BDML_PS2_g12/uniandes-bdml-202510-ps-2/train_hogares.csv")
+train_personas<-read.csv("~/Documents/Documents - Maya’s MacBook Air/GitHub/BDML_PS2_g12/uniandes-bdml-202510-ps-2/train_personas.csv")
+test_hogares<-read.csv("~/Documents/Documents - Maya’s MacBook Air/GitHub/BDML_PS2_g12/uniandes-bdml-202510-ps-2/test_hogares.csv")
+test_personas<-read.csv("~/Documents/Documents - Maya’s MacBook Air/GitHub/BDML_PS2_g12/uniandes-bdml-202510-ps-2/test_personas.csv")
+sample<-read.csv("~/Documents/Documents - Maya’s MacBook Air/GitHub/BDML_PS2_g12/uniandes-bdml-202510-ps-2/sample_submission.csv")
 
 # Data pre-processing ------------------------------------------------------
 
@@ -47,13 +49,9 @@ pre_process_personas <- function(data) {
     menor = ifelse(P6040 <= 6, 1, 0), # Menores
     EducLevel = ifelse(P6210 == 9, 0, P6210), # Replace 9 with 0
     ocupado = ifelse(is.na(Oc), 0, 1),
-    regSalud = ifelse(P6090 == 9 | is.na(P6090), 0, P6090), # Replace 9 and NA with 0
-    Cotizante = ifelse(P6920 == 2 | P6920 == 3 | is.na(P6920), 0, P6920),
-    Pensionado = ifelse(P6920 == 1 | P6920 == 2 | is.na(P6920), 0, 1),
-    SegundoTrabajo = ifelse(P7040 == 1, 1, 0),
-    AuxAlime = ifelse(P6590 == 1, 1, 0)
+    regSalud = ifelse(P6090 == 9 | is.na(P6090), 0, P6090) # Replace 9 and NA with 0
   ) %>%
-    select(id, Orden, mujer, H_Head, menor, EducLevel, ocupado, regSalud, Cotizante, Pensionado, SegundoTrabajo, AuxAlime)
+    select(id, Orden,mujer,H_Head,menor,EducLevel,ocupado,regSalud)
   
   # Household-level aggregations
   data_nivelHogar <- data %>% 
@@ -62,8 +60,7 @@ pre_process_personas <- function(data) {
       nmujeres = sum(mujer, na.rm = TRUE),
       nmenores = sum(menor, na.rm = TRUE),
       maxEducLevel = max(EducLevel, na.rm = TRUE),
-      nocupados = sum(ocupado, na.rm = TRUE), 
-      noafiladiossal = sum(regSalud,na.rm = TRUE)
+      nocupados = sum(ocupado, na.rm = TRUE)
     )
   
   # Get household head info
@@ -90,40 +87,42 @@ test_personas <-  pre_process_personas(test_personas)
 
 
 pre_process_hogar<-  function(data_hogares, data_personas, is_train) {
-  data <- data_hogares %>%
-    mutate(arrienda = ifelse(P5090 == 3, 1, 0),#Arrienda
-           numdecuartos = P5000, ## Numero de cuartos en la casa 
-           dueño = ifelse(P5090==1 |P5090==2 ,1,0), ## es dueño o no 
-           invasiones = ifelse(P5090==5 ,1,0)
-          ) 
-    # Conditionally include Pobre only for train data
-    if (is_train) {
-      data <- data %>% select(id, Dominio, arrienda, Pobre,numdecuartos,dueño,invasiones)
-    } else {
-      data <- data %>% select(id, Dominio, arrienda,numdecuartos,dueño,invasiones)
-    }
+  data_hogares <- data_hogares %>%
+    mutate(arrienda = ifelse(P5090 == 3, 1, 0), #Arriendo
+           viviendaPropia = ifelse(P5090 == 1, 1, 0), #Vivienda propia totalmente pagada
+           dueño = ifelse(P5090==1 |P5090==2 ,1,0), # es dueño o no
+           invasiones = ifelse(P5090==5 ,1,0)) #Posesion sin titulo
+  numCuartos = P5000, ## Numero de cuartos en la casa 
+  # Conditionally include Pobre only for train data
+  if (is_train) {
+    data_hogares <- data_hogares %>% dplyr::select(id, Dominio, arrienda, viviendaPropia, dueño, invasion, numCuartos, Nper, Pobre)
+  } else {
+    data_hogares <- data_hogares %>% dplyr::select(id, Dominio, arrienda, viviendaPropia, dueño, invasion, numCuartos, Nper)
+  }
   
-  data <- data %>% 
+  data_joined <- data_hogares %>% 
     left_join(data_personas, by = "id")
+  print(colnames(data_joined))
   
   # Remove 'id' only for train data
   if (is_train) {
-    data <- data %>% select(-id)
+    data_joined <- data_joined %>% dplyr::select(-id)
   }
   
   #Convertir a factores
-  data<- data %>% 
+  data_joined <- data_joined %>% 
     mutate(Dominio=factor(Dominio),
-           arrienda=factor(arrienda, levels=(0,1), labels=c("No","Yes")),
+           arrienda=factor(arrienda, levels=c(0,1), labels=c("No","Yes")),
+           viviendaPropia=factor(viviendaPropia, levels=c(0,1), labels=c("No","Yes")),
+           dueno=factor(dueno, levels=c(0,1), labels=c("No","Yes")), 
+           invasion=factor(invasion, levels=c(0,1), labels=c("No","Yes")),
            H_Head_Educ_level=factor(H_Head_Educ_level,levels=c(0:6), labels=c("Ns",'Ninguno', 'Preescolar','Primaria', 'Secundaria','Media', 'Universitaria')),
-           maxEducLevel=factor(maxEducLevel,levels=c(0:6), labels=c("Ns",'Ninguno', 'Preescolar','Primaria', 'Secundaria','Media', 'Universitaria'))
-    )%>%
-    select(Dominio, arrienda, Pobre, Orden, mujer, H_head, menor, ocupado, redSalud
+           maxEducLevel=factor(maxEducLevel,levels=c(0:6), labels=c("Ns",'Ninguno', 'Preescolar','Primaria', 'Secundaria','Media', 'Universitaria')))
   if (is_train) {
-   data<- data %>% 
-    mutate(Pobre=factor(Pobre,levels=c(0,1),labels=c("No","Yes")))
+    data_joined <- data_joined %>% 
+      mutate(Pobre=factor(Pobre,levels=c(0,1),labels=c("No","Yes")))
   } 
-  return(data)
+  return(data_joined)
 }
 
 
@@ -132,85 +131,13 @@ test <- pre_process_hogar(test_hogares, test_personas, is_train = FALSE)
 
 
 train_1<- train %>% 
-  select(Pobre, Dominio, arrienda, Orden, ocupado, regSalud, nmujeres, nmenores, maxEducLevel, nocupados, H_Head_mujer, H_Head_Educ_level, H_Head_ocupado)
+  select(Pobre, Dominio, arrienda, Orden, ocupado, regSalud, nmujeres, nmenores, maxEducLevel, nocupados, H_Head_mujer, H_Head_Educ_level, H_Head_ocupado, Nper)
 
 test_1<- test %>% 
-  select(Dominio, arrienda, Orden, ocupado, regSalud, nmujeres, nmenores, maxEducLevel, nocupados, H_Head_mujer, H_Head_Educ_level, H_Head_ocupado)
+  select(Dominio, arrienda, Orden, ocupado, regSalud, nmujeres, nmenores, maxEducLevel, nocupados, H_Head_mujer, H_Head_Educ_level, H_Head_ocupado, Nper)
 
 colSums(is.na(train))
 
-###### Model training
-ctrl<- trainControl(method = "cv",
-                    number = 10,
-                    classProbs = TRUE,
-                    savePredictions = T)
-
-set.seed(098063)
-
-model1 <- train(Pobre~.,
-                data=train,
-                metric = "Accuracy",
-                method = "glmnet",
-                trControl = ctrl,
-                tuneGrid=expand.grid(
-                  alpha = seq(0,1,by=.2),
-                  lambda =10^seq(10, -2, length = 10)
-                )
-)
-model1
-
-#Otras metricas
-
-p_load(Metrics)
-
-fiveStats <- function(...)  c(prSummary(...))  
-
-
-ctrl<- trainControl(method = "cv",
-                    number = 10,
-                    classProbs = TRUE,
-                    summaryFunction = fiveStats,
-                    savePredictions = T)
-
-#install.packages("MLmetrics")
-#require(MLmetrics)
-
-set.seed(098063)
-model1 <- train(Pobre~.,
-                data=train_1,
-                metric = "F",
-                method = "glmnet",
-                trControl = ctrl,
-                family="binomial",
-                tuneGrid=expand.grid(
-                  alpha = seq(0,1,by=.5),
-                  lambda =10^seq(-1, -3, length = 10)
-                )
-                
-)
-
-model1
-
-predictSample <- test   %>% 
-  mutate(pobre_lab = predict(model1, newdata = test, type = "raw")    ## predicted class labels
-  )  %>% select(id,pobre_lab)
-
-head(predictSample)
-
-predictSample<- predictSample %>% 
-  mutate(pobre=ifelse(pobre_lab=="Yes",1,0)) %>% 
-  select(id,pobre)
-head(predictSample) 
-
-# Replace '.' with '_' in the numeric values converted to strings
-lambda_str <- gsub(
-  "/.", "_", 
-  as.character(round(model1$bestTune$lambda, 4)))
-alpha_str <- gsub("/.", "_", as.character(model1$bestTune$alpha))
-
-name<- paste0(
-  "EN_lambda_", lambda_str,
-  "_alpha_" , alpha_str, 
-  ".csv") 
-
-write.csv(predictSample,name, row.names = FALSE)
+#Save clean data
+write_rds(train,"train.rds")
+write_rds(test,"test.rds")
