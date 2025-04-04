@@ -47,7 +47,7 @@ pre_process_personas <- function(data) {
     mujer = ifelse(P6020 == 2, 1, 0), 
     H_Head = ifelse(P6050 == 1, 1, 0), # Household head
     menor = ifelse(P6040 <= 6, 1, 0), # Menores
-    EducLevel = ifelse(P6210 == 9, 0, P6210), # Replace 9 with 0
+    EducLevel = ifelse(P6210 == 9 | is.na(P6090), 0, P6210), # Replace 9 and NA with 0
     ocupado = ifelse(is.na(Oc), 0, 1),
     regSalud = ifelse(P6090 == 9 | is.na(P6090), 0, P6090) # Replace 9 and NA with 0
   ) %>%
@@ -90,14 +90,14 @@ pre_process_hogar<-  function(data_hogares, data_personas, is_train) {
   data_hogares <- data_hogares %>%
     mutate(arrienda = ifelse(P5090 == 3, 1, 0), #Arriendo
            viviendaPropia = ifelse(P5090 == 1, 1, 0), #Vivienda propia totalmente pagada
-           dueño = ifelse(P5090==1 |P5090==2 ,1,0), # es dueño o no
-           invasiones = ifelse(P5090==5 ,1,0)) #Posesion sin titulo
-  numCuartos = P5000, ## Numero de cuartos en la casa 
+           dueno = ifelse(P5090==1 |P5090==2 ,1,0), # es dueño o no
+           invasion = ifelse(P5090==5 ,1,0), #Posesion sin titulo
+           numCuartos = P5000) ## Numero de cuartos en la casa 
   # Conditionally include Pobre only for train data
   if (is_train) {
-    data_hogares <- data_hogares %>% dplyr::select(id, Dominio, arrienda, viviendaPropia, dueño, invasion, numCuartos, Nper, Pobre)
+    data_hogares <- data_hogares %>% dplyr::select(id, Dominio, arrienda, viviendaPropia, dueno, invasion, numCuartos, Nper, Pobre)
   } else {
-    data_hogares <- data_hogares %>% dplyr::select(id, Dominio, arrienda, viviendaPropia, dueño, invasion, numCuartos, Nper)
+    data_hogares <- data_hogares %>% dplyr::select(id, Dominio, arrienda, viviendaPropia, dueno, invasion, numCuartos, Nper)
   }
   
   data_joined <- data_hogares %>% 
@@ -136,7 +136,9 @@ train_1<- train %>%
 test_1<- test %>% 
   select(Dominio, arrienda, Orden, ocupado, regSalud, nmujeres, nmenores, maxEducLevel, nocupados, H_Head_mujer, H_Head_Educ_level, H_Head_ocupado, Nper)
 
-colSums(is.na(train))
+#Medir desbalance
+prop.table(table(train$pobre))
+prop.table(table(test$desempleado))
 
 #Save clean data
 write_rds(train,"train.rds")

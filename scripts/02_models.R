@@ -48,6 +48,7 @@ model1 <- train(Pobre~.,
 )
 model1
 
+
 #Otras metricas
 
 p_load(Metrics)
@@ -66,7 +67,7 @@ ctrl<- trainControl(method = "cv",
 
 set.seed(098063)
 model1 <- train(Pobre~.,
-                data=train_1,
+                data=train,
                 metric = "F",
                 method = "glmnet",
                 trControl = ctrl,
@@ -79,9 +80,34 @@ model1 <- train(Pobre~.,
 
 model1
 
+multiStats <- function(...) c(twoClassSummary(...), defaultSummary(...), prSummary(...))
+
+ctrl_multiStats <- trainControl(
+  method = "cv",  # Usamos validación cruzada
+  number = 5,  # 5-fold cross-validation
+  summaryFunction = multiStats,  # Usamos la función de evaluación personalizada
+  classProbs = TRUE,  # Habilita el cálculo de probabilidades para cada clase
+  verbose = FALSE,  # Evita mensajes innecesarios en la consola
+  savePredictions = TRUE  # Guarda las predicciones para análisis posterior
+)
+
+model2 <- train(Pobre~.,
+                data=train,
+                metric = "Accuracy",
+                method = "glmnet",
+                trControl = ctrl,
+                tuneGrid=expand.grid(
+                  alpha = seq(0,1,by=.2),
+                  lambda =10^seq(10, -2, length = 10)
+                )
+)
+model2
+
+colSums(is.na(train))
+
 predictSample <- test   %>% 
-  mutate(pobre_lab = predict(model1, newdata = test, type = "raw")    ## predicted class labels
-  )  %>% select(id,pobre_lab)
+  mutate(pobre_lab = predict(model1, newdata = test, type = "raw"))    ## predicted class labels  
+         %>% select(id,pobre_lab)
 
 head(predictSample)
 
@@ -90,6 +116,32 @@ predictSample<- predictSample %>%
   select(id,pobre)
 head(predictSample) 
 
+# Matriz de Confusión
+logit_allvar<-confusionMatrix(data = test$pobre_lab, 
+                               reference = test$Pobre, 
+                               positive="Pobre", 
+                               mode = "prec_recall")
+logit_allvar
+
+
+# Guardo en un data frame
+df_logit1 <- data.frame(
+  Model = "Logit (all variables)",
+  Accuracy = model1$overall["Accuracy"],
+  Precision = model1$byClass["Precision"],
+  Recall = model1$byClass["Recall"],
+  F1_Score = model1$byClass["F1"]
+)
+
+#  Elimino los nombres de las filas que no informan nada.
+rownames(df_logit1)<-NULL
+df_logit1
+
+
+# Comparamos
+metrics_df <- rbind(df_logit1, df_logit2)
+
+metrics_df
 # Replace '.' with '_' in the numeric values converted to strings
 lambda_str <- gsub(
   "/.", "_", 
