@@ -18,7 +18,8 @@ p_load(dplyr,
        tidyverse, # tidy-data
        glmnet, # To implement regularization algorithms. 
        caret, # creating predictive models
-       Metrics
+       Metrics, 
+       pROC
 )
 
 # Load data
@@ -29,7 +30,6 @@ head(train, 5)
 head(test, 5)
 
 ### DATA VIZUALIZATION 
-
 
 ggplot(train, aes(x = Pobre, fill = Pobre)) +
   geom_bar() + 
@@ -97,7 +97,7 @@ cm_EN_Acu <- confusionMatrix(
 # Store Performance Metrics
 model1 <- data.frame(
   Model = "EN_Acu",
-  Accuracy = cm_EN_Acu$overall["Accuracy"],
+  Accuracy = cm_EN¿´_Acu$overall["Accuracy"],
   Precision = cm_EN_Acu$byClass["Precision"],
   Recall = cm_EN_Acu$byClass["Recall"],
   F1_Score = cm_EN_Acu$byClass["F1"]
@@ -159,8 +159,7 @@ model2 <- data.frame(
   F1_Score = cm_EN_F$byClass["F1"]
 )
 
-model1
-model2 ## model 2 improve recall,precision and F1-Score 
+metrics_df <- rbind(model1, model2) ## model 2 improves recall and F1-Score 
 
 ## Model were we change the threshold 
 
@@ -170,7 +169,7 @@ roc_EN_F <- roc(response = Predict_EN_F$obs,
 
 plot(roc_EN_F, col = "blue", lwd = 2, main = "ROC Curve for EN_F Model")
 
-rrfThresh_en <- coords(roc_EN_F, x = "best", best.method = "closest.topleft")
+rfThresh_en <- coords(roc_EN_F, x = "best", best.method = "closest.topleft")
 best_threshold <- as.numeric(rfThresh_en$threshold)
 
 
@@ -191,8 +190,6 @@ val_set<- val_set%>% mutate(Pobre_hat_EN_F_c=predict(EN_F,newdata = val_set,
 val_set<- val_set  %>% mutate(Pobre_hat_EN_F_cutoff=factor(ifelse(Pobre_hat_EN_F_c>= best_threshold ,1,0),
                                                                   levels = c(0,1), labels = c("No","Yes")))
 
-
-
 ### Matriz de Confusión
 cm_EN_F_cutoff <- confusionMatrix(
   data = val_set$Pobre_hat_EN_F_cutoff, 
@@ -209,10 +206,9 @@ model3 <- data.frame(
   F1_Score = cm_EN_F_cutoff$byClass["F1"]
 )
 
+metrics_df <- rbind(metrics_df, model3) ## model 3 improves recall,precision and F1-Score 
 
-### PROC 
-
-
+### PROC- different thresholds to max f1 score 
 
 prec_recall<-data.frame(coords(roc_EN_F, seq(0,1,length=100), ret=c("threshold", "precision", "recall")))
 prec_recall
@@ -242,6 +238,57 @@ model4 <- data.frame(
   F1_Score = cm_EN_F_cutoff_PROC$byClass["F1"]
 )
 
+metrics_df <- rbind(metrics_df, model4) 
+
+
+knn <- train(Pobre~., 
+              data = train, 
+             metric = "F1",
+              method = "knn",  
+              tuneGrid = expand.grid(k=seq(15,39,by=3)), # search over the grid
+              trControl = ctrl)
+
+coef_Enet=coef(knn$finalModel, knn$bestTune$lambda)
+
+Predict_knn <- data.frame(
+  obs = val_set$Pobre,                                    # Observed class labels
+  predict(knn, newdata = val_set, type = "prob"),      # Predicted probabilities
+  pred = predict(knn, newdata = val_set, type = "raw") # Predicted class labels
+)
+
+# Add Predictions to Validation Set
+val_set <- val_set %>% 
+  mutate(Pobre_hat_knn = predict(knn, newdata = val_set, type = "raw"))
+
+# Compute Confusion Matrix
+cm_EN_F <- confusionMatrix(
+  data = val_set$Pobre_hat_knn, 
+  reference = val_set$Pobre, 
+  positive = "Yes",  # Specify the positive class (adjust as needed)
+  mode = "everything"
+)
+
+# Store Performance Metrics
+model5 <- data.frame(
+  Model = "knn",
+  Accuracy = knn$overall["Accuracy"],
+  Precision = knn$byClass["Precision"],
+  Recall = knn$byClass["Recall"],
+  F1_Score = knn$byClass["F1"]
+)
+
+metrics_df <- rbind(metrics_df, model5) ## model 2 improves recall and F1-Score 
+
+
+model6_default_lda = train(Default~., 
+                    data=credit, 
+                    method="lda",
+                    trControl = ctrl)
+
+model7_default_qda = train(Default~., 
+                    data=credit[,-c(10:13)], 
+                    method="qda",
+                    trControl = ctrl)
 ##### Resampling 
 
 
@@ -251,7 +298,11 @@ p_load(Metrics)
 
 fiveStats <- function(...)  c(prSummary(...))  
 
-fitControl <- trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = twoClassSummary,savePredictions = T )
+fitControl <- trainControl(method = "cv", 
+                           number = 10, 
+                           classProbs = TRUE, 
+                           summaryFunction = twoClassSummary,
+                           savePredictions = T )
 
 set.seed(123)
 tree_lenght <- train(
@@ -305,7 +356,7 @@ cm_Trees<- confusionMatrix(
 )
 
 # Store Performance Metrics
-model5 <- data.frame(
+model8 <- data.frame(
   Model = "TREES_AUC",
   Accuracy = cm_Trees$overall["Accuracy"],
   Precision = cm_Trees$byClass["Precision"],
