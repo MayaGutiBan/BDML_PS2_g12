@@ -1,23 +1,36 @@
-
-##### Initial cinfigurations ####
-
 if (!require("pacman")) install.packages("pacman")
 p_load(tidyverse, # tidy-data
        glmnet, # To implement regularization algorithms. 
        caret, # creating predictive models
        Metrics,
-       ggplot2,
        dplyr,
        pROC,
        rpart,
-       rpart.plot,
-       ranger
+       rpart.plot
 )
 
-### Load DATA 
- 
+setwd("/Users/carlosmanjarres/Desktop/Big_data")
+
+p_load("ranger")
+p_load("caret") ## to adjust the hiperparameters 
+
+train <- readRDS("/Users/carlosmanjarres/Desktop/Big_data/train.rds")
 
 
+### Data partition to validate F1 score 
+getwd()
+set.seed(123)
+train_index <- createDataPartition(train$Pobre, p = 0.8, list = FALSE)
+train_set <- train[train_index, ]   # Used for training & cross-validation
+val_set   <- train[-train_index, ]  
+
+## store data set to improve efficiency 
+
+saveRDS(val_set,file = "val_set.RDS" )
+saveRDS(train_set, file = "train_set.RDS")
+
+###
+train_set <- readRDS("/Users/carlosmanjarres/Desktop/Big_data/train_set.RDS")
 
 
 ### 1. RANDOM FOREST ---------------  
@@ -113,20 +126,7 @@ model10 <- data.frame(
 )
 
 
-##### with CV opt the Hyper-parameters -------
-
-
-# Paso 1: Cargar librerías 
-library(parallel)
-
-library(doParallel)
-
-# Paso 2: Detectar núcleos y crear clúster
-num_cores <- detectCores() - 2  # Usa todos menos 1 para que no se congele el sistema
-cl <- makePSOCKcluster(num_cores)
-registerDoParallel(cl)
-
-# Paso 3: Ahora corré tu train() normalment
+### 2. with CV opt the Hyper-parameters -------
 
 fiveStats <- function(...) c(prSummary(...))
 
@@ -137,7 +137,6 @@ fitControl <- trainControl(
   classProbs = TRUE,
   savePredictions = "final"
 )
-
 
 RF_Grid <- train(
   Pobre ~ ., 
@@ -153,39 +152,11 @@ RF_Grid <- train(
   importance = "impurity"
 ) #### mtry = 4 splitrule = gini and min.node.size = 5
 
-# Paso 4: Cuando termine, apagá el clúster
-stopCluster(cl)
-registerDoSEQ()
 
 
+##### RF GRID PREDICTIONS -------
 
-
-pred_prob <- predict(tree_ranger_grid, newdata = val_set, type = "prob")
-
-umbral <- 0.5
-pred_clasificada <- ifelse(pred_prob$Yes > umbral, "Yes", "No")
-pred_clasificada <- factor(pred_clasificada, levels = c("No", "Yes"))
-
-val_set <- val_set %>%
-  mutate(Pobre_rf_ROC = factor(pred_clasificada, levels = levels(Pobre)))
-
-cm_RF_ROC <- confusionMatrix(
-  data = val_set$Pobre_rf_ROC, 
-  reference = val_set$Pobre, 
-  positive = "Yes",
-  mode = "everything"
-)
-
-model14 <- data.frame(
-  Model = "RF Opti ROC",
-  Accuracy = cm_RF_ROC$overall["Accuracy"],
-  Precision = cm_RF_ROC$byClass["Precision"],
-  Recall = cm_RF_ROC$byClass["Recall"],
-  F1_Score = cm_RF_ROC$byClass["F1"]
-)
-
-
-### 2. RF GRID PREDICTIONS -------
+val_set <- readRDS("/Users/carlosmanjarres/Desktop/Big_data/val_set.RDS")
 
 pred_prob <- predict(RF_Grid, newdata = val_set, type = "prob")
 
@@ -260,6 +231,8 @@ model_RF <- data.frame(
   F1_Score = cm_RF_cutoff_PROC$byClass["F1"]
 )
 
+resultados <- rbind(model_RF, model14)
+
 ### SUBIR MODELO A KAGGLE :) mejor predicción 
 
 test <- readRDS("/Users/carlosmanjarres/Desktop/Big_data/test.rds")
@@ -282,20 +255,19 @@ file_name <- paste0("RF_mtry_", mtry_str, ".csv")
 write.csv(test, file_name, row.names = FALSE)
 
 
+## 3. Baging :) ------
 
-##### 3. Bagging model 
 
-Baging <- ranger::ranger(
+Baging <- ranger(
   Pobre ~ .,  
   data = train_set,
-  num.trees = 500,
-  mtry = 16,
-  min.node.size = 1,
+  num.trees = 500,  
+  mtry = 65,
+  min.node.size = 4,
   importance = "impurity",
   probability = TRUE
 )
 
-colnames(train_set)
 
 # Obtener predicciones de probabilidades y clases
 pred_bagging <- predict(Baging, data = val_set)
@@ -317,11 +289,141 @@ cm_Bagging <- confusionMatrix(
 )
 
 # Guardar métricas de desempeño
-model11
-model11<- data.frame(
+
+model_bagingg<- data.frame(
   Model = "Bagging",
   Accuracy = cm_Bagging$overall["Accuracy"],
   Precision = cm_Bagging$byClass["Precision"],
   Recall = cm_Bagging$byClass["Recall"],
   F1_Score = cm_Bagging$byClass["F1"]
 )
+
+### guardar performance modelos 
+
+resultados <- rbind(model_bagingg,resultados)
+
+
+
+
+
+### 4. Boosting =)  ---------
+
+
+## definir la gramilla de entrenamiento 
+
+train_set <- readRDS("/Users/carlosmanjarres/Desktop/Big_data/train_set.RDS")
+
+p_load('xgboost')
+
+# Definir el grid de hiperparámetros para XGBoost enfocado en clasificación
+grid_xgb <- expand.grid(
+  nrounds = c(250,500), ## 500 rounds 
+  max_depth = 4, 
+  eta = 0.01, 
+  gamma =c(0, 1), ### gamma 0 
+  min_child_weight = c(5, 10),  ### 5 
+  colsample_bytree = c(0.33, 0.66), ## 0,66
+  subsample = c(0.4)
+)
+fiveStats <- function(...) c(prSummary(...)) # Configurar el control de validación cruzada para clasificación
+fitControl <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,                    # Para calcular probabilidades de clase
+  summaryFunction = fiveStats,    
+  verboseIter = FALSE
+)
+
+set.seed(1011) # Entrenar el modelo XGBoost para clasificación
+xgb_model <- train(
+  Pobre ~ .,
+  data = train_set,
+  method = "xgbTree",
+  trControl = fitControl,
+  tuneGrid = grid_xgb,
+  metric = "F",       ## buscamos max el F1 score 
+  verbose = FALSE
+)
+
+# Mostrar resultados
+print(xgb_model)
+
+val_set <- readRDS("/Users/carlosmanjarres/Desktop/Big_data/val_set.RDS")
+
+pred_prob <- predict(xgb_model, newdata = val_set, type = "prob")
+
+umbral <- 0.5
+pred_clasificada <- ifelse(pred_prob$Yes > umbral, "Yes", "No")
+pred_clasificada <- factor(pred_clasificada, levels = c("No", "Yes"))
+
+val_set <- val_set %>%
+  mutate(Pobre_xgb_GRID = factor(pred_clasificada, levels = levels(Pobre)))
+
+cm_XGB_GRID <- confusionMatrix(
+  data = val_set$Pobre_xgb_GRID, 
+  reference = val_set$Pobre, 
+  positive = "Yes",
+  mode = "everything"
+)
+
+model14 <- data.frame(
+  Model = "Boosting XGB",
+  Accuracy = cm_XGB_GRID$overall["Accuracy"],
+  Precision = cm_XGB_GRID$byClass["Precision"],
+  Recall = cm_XGB_GRID$byClass["Recall"],
+  F1_Score = cm_XGB_GRID$byClass["F1"]
+)
+
+resultados <- rbind(resultados,model14)
+
+### improve 
+
+Pobre_XGB_GRID <- data.frame(
+  obs = val_set$Pobre,                                    # Observed class labels
+  predict(xgb_model, newdata = val_set, type = "prob"),      # Predicted probabilities
+  pred = predict(xgb_model, newdata = val_set, type = "raw") # Predicted class labels
+)
+
+
+## construct the ROC for RF_GRID model 
+roc_XGB_GRID <- roc(response = Pobre_XGB_GRID$obs, 
+                   predictor = Pobre_XGB_GRID$Yes, 
+                   levels = c("No", "Yes")) 
+
+plot(roc_RF_GRID, col = "green", lwd = 2, main = "ROC Curve for RF Model with hyperparameter optimized")
+
+## Construct PROC
+prec_recall<-data.frame(coords(roc_XGB_GRID, seq(0,1,length=100), ret=c("threshold", "precision", "recall")))
+prec_recall
+
+prec_recall<- prec_recall  %>% mutate(F1=(2*precision*recall)/(precision+recall))
+prec_recall
+
+# Encontrar el umbral óptimo que maximiza el F1-score
+prec_recall$threshold[which.max(prec_recall$F1)]
+
+pobre_hat <- Pobre_XGB_GRID$Yes
+
+val_set<- val_set  %>% mutate(Pobre_hat_XGB_cutoff_PROC=factor(ifelse(pobre_hat >= prec_recall$threshold[which.max(prec_recall$F1)] ,1,0),
+                                                              levels = c(0,1), labels = c("No","Yes")))
+
+
+cm_XGB_cutoff_PROC <- confusionMatrix(
+  data = val_set$Pobre_hat_XGB_cutoff_PROC, 
+  reference = val_set$Pobre, 
+  positive="Yes", 
+  mode = "everything"
+)
+
+model_XGB <- data.frame(
+  Model = "XGB GRID PROC",
+  Accuracy = cm_XGB_cutoff_PROC$overall["Accuracy"],
+  Precision = cm_XGB_cutoff_PROC$byClass["Precision"],
+  Recall = cm_XGB_cutoff_PROC$byClass["Recall"],
+  F1_Score = cm_XGB_cutoff_PROC$byClass["F1"]
+)
+
+
+resultados <- rbind(model_XGB,resultados )
+
+write.csv(resultados, "resultados_modelos.csv", row.names = FALSE)
