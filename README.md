@@ -21,16 +21,16 @@ The repository is organized as follows:
 
 ## Setup Instructions  
 To run this project, you need R and the following packages:  
-  tidyverse,     # Collection of R packages for data manipulation, visualization, and tidy data principles
-  glmnet,        # Implements Lasso and Elastic Net regularized regression
-  caret,         # Streamlined tools for training and evaluating machine learning models
-  Metrics,       # Performance metrics for regression and classification models
-  dplyr,         # Data manipulation (part of tidyverse, but can be loaded individually)
-  pROC,          # Tools for visualizing and analyzing ROC curves
-  rpart,         # Recursive partitioning for classification and regression trees
-  rpart.plot,    # Enhanced plotting of decision trees built with rpart
-  ggplot2,       # Grammar of graphics for data visualization (also part of tidyverse)
-  smotefamily    # Functions for applying SMOTE and other resampling techniques for imbalanced data
+ - **`tidyverse`**      # Collection of R packages for data manipulation, visualization, and tidy data principles
+ - **`glmnet`**         # Implements Lasso and Elastic Net regularized regression
+ - **` caret`**         # Streamlined tools for training and evaluating machine learning models
+ - **` Metrics`**       # Performance metrics for regression and classification models
+ - **` dplyr`**         # Data manipulation (part of tidyverse, but can be loaded individually)
+ - **` pROC`**          # Tools for visualizing and analyzing ROC curves
+ - **` rpart`**         # Recursive partitioning for classification and regression trees
+ - **` rpart.plot`**    # Enhanced plotting of decision trees built with rpart
+ - **` ggplot2`**       # Grammar of graphics for data visualization (also part of tidyverse)
+ - **` smotefamily`**   # Functions for applying SMOTE and other resampling techniques for imbalanced data
 
 
 
