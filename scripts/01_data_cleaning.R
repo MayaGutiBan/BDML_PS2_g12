@@ -33,6 +33,8 @@ sample<-read.csv("~/Documents/Documents - Maya’s MacBook Air/GitHub/BDML_PS2_g
 # Data pre-processing ------------------------------------------------------
 
 
+
+
 new_hogar_variable <- train_personas  %>% 
   group_by(id) %>%
   summarize(h_Inactivos=sum(Ina,na.rm=TRUE),
@@ -170,62 +172,85 @@ pre_process_personas <- function(data) {
 train_personas <- pre_process_personas(train_personas)
 test_personas <-  pre_process_personas(test_personas)
 
-pre_process_hogar<-  function(data_hogares, data_personas, is_train) {
+pre_process_hogar <- function(data_hogares, data_personas, is_train) {
   data_hogares <- data_hogares %>%
-    mutate(arrienda = ifelse(P5090 == 3, 1, 0), #Arriendo
-           viviendaPropia = ifelse(P5090 == 1, 1, 0), #Vivienda propia totalmente pagada
-           dueno = ifelse(P5090==1 |P5090==2 ,1,0), # es dueño o no
-           invasion = ifelse(P5090==5 ,1,0), #Posesion sin titulo
-           numCuartos = P5000,
-           Dormitorios = P5010,
-           Valarriendo = ifelse(is.na(P5140),0,P5140), ## valor de 0 a los NA
-           arriendo_estimado_pc   = ifelse(Nper > 0, P5130 / Nper, 0),
-           paga_arriendo          = ifelse(!is.na(P5140) & P5140 > 0, 1, 0),
-           cuota_amortiza         = ifelse(!is.na(P5100) & P5100 > 0, 1, 0)
-           ) ## Numero de cuartos en la casa 
-  # Conditionally include Pobre only for train data
+    mutate(
+      arrienda = ifelse(P5090 == 3, 1, 0),
+      viviendaPropia = ifelse(P5090 == 1, 1, 0),
+      dueno = ifelse(P5090 == 1 | P5090 == 2, 1, 0),
+      invasion = ifelse(P5090 == 5, 1, 0),
+      numCuartos = P5000,
+      Dormitorios = P5010,
+      Valarriendo = ifelse(is.na(P5140), 0, P5140),
+      arriendo_estimado_pc = ifelse(Nper > 0, P5130 / Nper, 0),
+      paga_arriendo = ifelse(!is.na(P5140) & P5140 > 0, 1, 0),
+      cuota_amortiza = ifelse(!is.na(P5100) & P5100 > 0, 1, 0)
+    )
+  
+  # Seleccionar columnas relevantes
   if (is_train) {
-    data_hogares <- data_hogares %>% dplyr::select(id, Dominio, arrienda, viviendaPropia, dueno, invasion, numCuartos, Nper, Npersug,Dormitorios,Valarriendo,arriendo_estimado_pc, paga_arriendo,
-                                                   cuota_amortiza, Pobre)
+    data_hogares <- data_hogares %>%
+      select(id, Dominio, arrienda, viviendaPropia, dueno, invasion, numCuartos,
+             Nper, Npersug, Dormitorios, Valarriendo, arriendo_estimado_pc,
+             paga_arriendo, cuota_amortiza, Pobre)
   } else {
-    data_hogares <- data_hogares %>% dplyr::select(id, Dominio, arrienda, viviendaPropia, dueno, invasion, numCuartos, Nper,Npersug,Dormitorios,Valarriendo, arriendo_estimado_pc, paga_arriendo,
-                                                   cuota_amortiza )          
+    data_hogares <- data_hogares %>%
+      select(id, Dominio, arrienda, viviendaPropia, dueno, invasion, numCuartos,
+             Nper, Npersug, Dormitorios, Valarriendo, arriendo_estimado_pc,
+             paga_arriendo, cuota_amortiza)
   }
   
-  data_joined <- data_hogares %>% 
+  # Unir con datos de personas
+  data_joined <- data_hogares %>%
     left_join(data_personas, by = "id")
-  print(colnames(data_joined))
   
-  # Remove 'id' only for train data
+  # Eliminar id si es train
   if (is_train) {
-    data_joined <- data_joined %>% dplyr::select(-id)
+    data_joined <- data_joined %>% select(-id)
   }
   
-  #Convertir a factores
-  data_joined <- data_joined %>% 
-    mutate(Dominio=factor(Dominio),
-           arrienda=factor(arrienda, levels=c(0,1), labels=c("No","Yes")),
-           viviendaPropia=factor(viviendaPropia, levels=c(0,1), labels=c("No","Yes")),
-           dueno=factor(dueno, levels=c(0,1), labels=c("No","Yes")), 
-           invasion=factor(invasion, levels=c(0,1), labels=c("No","Yes")),
-           H_Head_Educ_level=factor(H_Head_Educ_level,levels=c(0:6), labels=c("Ns",'Ninguno', 'Preescolar','Primaria', 'Secundaria','Media', 'Universitaria')),
-           max_educ_level=factor(max_educ_level,levels=c(0:6), labels=c("Ns",'Ninguno', 'Preescolar','Primaria', 'Secundaria','Media', 'Universitaria'))
-           )
+  # Convertir a factores
+  data_joined <- data_joined %>%
+    mutate(
+      Dominio = factor(Dominio),
+      arrienda = factor(arrienda, levels = c(0,1), labels = c("No", "Yes")),
+      viviendaPropia = factor(viviendaPropia, levels = c(0,1), labels = c("No", "Yes")),
+      dueno = factor(dueno, levels = c(0,1), labels = c("No", "Yes")), 
+      invasion = factor(invasion, levels = c(0,1), labels = c("No", "Yes")),
+      H_Head_Educ_level = factor(H_Head_Educ_level, levels = 0:6, 
+                                 labels = c("Ns", "Ninguno", "Preescolar", "Primaria", "Secundaria", "Media", "Universitaria")),
+      max_educ_level = factor(max_educ_level, levels = 0:6, 
+                              labels = c("Ns", "Ninguno", "Preescolar", "Primaria", "Secundaria", "Media", "Universitaria")),
+      paga_arriendo = factor(paga_arriendo, levels = c(0,1), labels = c("No", "Yes")),
+      cuota_amortiza = factor(cuota_amortiza, levels = c(0,1), labels = c("No", "Yes"))
+    )
+  
   if (is_train) {
-    data_joined <- data_joined %>% 
-      mutate(Pobre=factor(Pobre,levels=c(0,1),labels=c("No","Yes")))
-  } 
+    data_joined <- data_joined %>%
+      mutate(Pobre = factor(Pobre, levels = c(0,1), labels = c("No", "Yes")))
+  }
+  
+  # Imputar NA de arriendo_estimado_pc con su media
+  data_joined <- data_joined %>%
+    mutate(arriendo_estimado_pc = if_else(
+      is.na(arriendo_estimado_pc),
+      mean(arriendo_estimado_pc, na.rm = TRUE),
+      arriendo_estimado_pc
+    ))
+  
+  # Reemplazar NA en columnas numéricas solamente
+  data_joined <- data_joined %>%
+    mutate(across(where(is.numeric), ~ ifelse(is.na(.), 0, .)))
+  
   return(data_joined)
 }
+
 
 train <- pre_process_hogar(train_hogares, train_personas, is_train = TRUE)
 test <- pre_process_hogar(test_hogares, test_personas, is_train = FALSE)
 
 
-
-
 ## Creación de nuevas variables 
-
 
 niveles_educ <- c("Ns" = 0,
                   "Ninguno" = 0,
@@ -254,48 +279,6 @@ test <- test %>%
 
   )
 
-#### tratamiento de los missing 
-
-# 4.1. Tratamiento de missings values
-
-# Variable arriendo pc
-
-train %>% 
-  count(paga_arriendo, sort = TRUE)
-
-train %>% 
-  count(arriendo_estimado_pc, sort = TRUE)
-
-train <- train %>%
-  mutate(
-    arriendo_estimado_pc = if_else(
-      is.na(arriendo_estimado_pc),
-      mean(arriendo_estimado_pc, na.rm = TRUE),
-      arriendo_estimado_pc
-    )
-  )
-
-test<- test %>%
-  mutate(
-    arriendo_estimado_pc = if_else(
-      is.na(arriendo_estimado_pc),
-      mean(arriendo_estimado_pc, na.rm = TRUE),
-      arriendo_estimado_pc
-    )
-  )
-
-train <- train %>%
-  mutate(across(everything(), ~ ifelse(is.na(.), 0, .)))
-
-test <- test %>%
-  mutate(across(everything(), ~ ifelse(is.na(.), 0, .)))
-
-
-## Verificar NAs 
-colSums(is.na(train))
-
 
 saveRDS(train, "train.rds")
 saveRDS(test, "test.rds")
-
-
