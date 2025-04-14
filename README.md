@@ -8,8 +8,7 @@ Poverty remains one of the most pressing global development challenges. Yet trad
 
 ## Team Members  
 - Carlos Manjarres  
-- Juan Felipe Triana  
-- Sebastian Trujillo  
+- Juan Felipe Triana   
 - Maya Gutiérrez  
 
 ## Repository Structure  
